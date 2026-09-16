@@ -1,6 +1,0 @@
-{
-  "regions": ["bom1"],
-  "functions": {
-    "api/live-proxy.js": { "maxDuration": 60 }
-  }
-}
