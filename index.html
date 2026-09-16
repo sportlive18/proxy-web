@@ -4463,7 +4463,7 @@
       }
       LOCAL_PROXY = localStorage.getItem('fc_local_proxy') || '';
       IN_PROXY = localStorage.getItem('in_proxy')
-        || (location.protocol.startsWith('http') ? location.origin + '/api/live-proxy' : '');
+        || 'https://m3u8-player-ashen.vercel.app/api/live-proxy';
     } catch { }
     function viaLocalProxy(url) { return LOCAL_PROXY + '?url=' + encodeURIComponent(url); }
     function isLocalUrl(u) { return /^https?:\/\/(localhost|127\.0\.0\.1)/i.test(u); }
@@ -5164,5 +5164,7 @@
     $('playerBaseUrl').value = window.location.origin + window.location.pathname;
   </script>
 </body>
+
+  <script async src="https://pl31358401.profitableratecpmnetwork.com/a3/81/41/a38141b4ff99f6ef8dbf9dc5f76bd86b.js"></script> 
 
 </html>
