@@ -799,9 +799,68 @@
       background: rgba(255, 255, 255, .1)
     }
 
+    /* ══ FLOATING QUICK CONTROLS ══
+       Rotate and fullscreen sit in their own stack on the right, clear of
+       the bottom bar. On a phone the bar's own buttons are within a thumb's
+       reach of the browser's gesture strip, which swallows taps; lifting
+       these two above it keeps them reliably hittable, and the safe-area
+       inset keeps them off a notched home indicator. */
+    #floatCtrls {
+      position: absolute;
+      right: 18px;
+      bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: opacity .3s;
+      pointer-events: auto
+    }
+
+    .fbtn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, .5);
+      border: 1px solid rgba(255, 255, 255, .18);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .45)
+    }
+
+    .fbtn:hover {
+      background: rgba(255, 255, 255, .2)
+    }
+
     #rotBtn.on {
       color: #1fb8ff;
-      background: rgba(31, 184, 255, .16)
+      background: rgba(31, 184, 255, .22);
+      border-color: rgba(31, 184, 255, .55)
+    }
+
+    /* Keep them on screen when the rest of the chrome fades: the point of
+       lifting them was reachability, and hiding them on a phone — where no
+       mousemove exists to bring the chrome back — would defeat it. */
+    #player.hide-ui #floatCtrls {
+      opacity: .55
+    }
+
+    @media(max-width:640px) {
+      #floatCtrls {
+        right: 12px;
+        bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+        gap: 10px
+      }
+
+      .fbtn {
+        width: 50px;
+        height: 50px
+      }
+
+      .fbtn svg {
+        width: 24px;
+        height: 24px
+      }
     }
 
     .skip-btn {
@@ -1979,19 +2038,25 @@
                 d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z" />
             </svg>
           </button>
-          <button class="ibtn" id="rotBtn" title="Rotate screen">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
-              <path
-                d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zm-6.25-.77a1.996 1.996 0 0 0-2.73 0L2.24 6.99a1.996 1.996 0 0 0 0 2.73l10.26 10.26c.75.75 1.97.75 2.73 0l5.25-5.25c.75-.75.75-1.97 0-2.73L10.23 1.75zm-1.3 1.41c.11-.11.3-.11.41 0l10.26 10.26c.11.11.11.3 0 .41l-5.25 5.25c-.11.11-.3.11-.41 0L3.68 8.82c-.11-.11-.11-.3 0-.41l5.25-5.25zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
-            </svg>
-          </button>
-          <button class="ibtn" id="fsBtn" title="Fullscreen">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
-              <path id="fsPath" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
-            </svg>
-          </button>
         </div>
       </div>
+    </div>
+
+    <!-- Floating quick controls: rotate and fullscreen. Kept in their own
+         stack above the bottom bar rather than in it, so on a phone they
+         clear the browser's gesture strip and stay hittable. -->
+    <div id="floatCtrls">
+      <button class="ibtn fbtn" id="rotBtn" title="Rotate screen">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
+          <path
+            d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zm-6.25-.77a1.996 1.996 0 0 0-2.73 0L2.24 6.99a1.996 1.996 0 0 0 0 2.73l10.26 10.26c.75.75 1.97.75 2.73 0l5.25-5.25c.75-.75.75-1.97 0-2.73L10.23 1.75zm-1.3 1.41c.11-.11.3-.11.41 0l10.26 10.26c.11.11.11.3 0 .41l-5.25 5.25c-.11.11-.3.11-.41 0L3.68 8.82c-.11-.11-.11-.3 0-.41l5.25-5.25zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
+        </svg>
+      </button>
+      <button class="ibtn fbtn" id="fsBtn" title="Fullscreen">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
+          <path id="fsPath" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+        </svg>
+      </button>
     </div>
   </div>
 
