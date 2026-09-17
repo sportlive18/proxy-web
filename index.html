@@ -330,6 +330,33 @@
       display: block
     }
 
+    /* ── ROTATE SCREEN ──
+       A 90°/270° rotation swaps the element's box, so the video is sized
+       against the viewport the other way round and re-centred. 180° is a
+       plain flip and keeps its original box. */
+    #video.rot-90,
+    #video.rot-270 {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 100vh;
+      height: 100vw;
+      max-width: none;
+      max-height: none
+    }
+
+    #video.rot-90 {
+      transform: translate(-50%, -50%) rotate(90deg)
+    }
+
+    #video.rot-270 {
+      transform: translate(-50%, -50%) rotate(270deg)
+    }
+
+    #video.rot-180 {
+      transform: rotate(180deg)
+    }
+
     #clickZone {
       position: absolute;
       inset: 0;
@@ -772,6 +799,11 @@
       background: rgba(255, 255, 255, .1)
     }
 
+    #rotBtn.on {
+      color: #1fb8ff;
+      background: rgba(31, 184, 255, .16)
+    }
+
     .skip-btn {
       display: flex;
       align-items: center;
@@ -782,7 +814,7 @@
       cursor: pointer;
       padding: 8px;
       border-radius: 8px;
-      font-size: #0.83rem;
+      font-size: .83rem;
       font-weight: 700;
       font-family: 'Inter', sans-serif;
       transition: background .15s
@@ -1290,507 +1322,6 @@
       }
     }
 
-    /* ══ SIDEBAR ══ */
-    #bundleToggle {
-      position: fixed;
-      right: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      background: linear-gradient(135deg, #1fb8ff, #0a7abf);
-      color: #fff;
-      border: none;
-      border-radius: 10px 0 0 10px;
-      padding: 14px 8px;
-      font-size: .72rem;
-      font-weight: 700;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      cursor: pointer;
-      z-index: 9999;
-      letter-spacing: .08em;
-      font-family: 'Inter', sans-serif;
-      transition: all .2s;
-      box-shadow: -4px 0 20px rgba(31, 184, 255, .3);
-    }
-
-    #bundleToggle:hover {
-      background: linear-gradient(135deg, #33c5ff, #1591d4);
-      padding-right: 10px
-    }
-
-    #bundleToggle.open {
-      right: 380px
-    }
-
-    #bundleSidebar {
-      position: fixed;
-      right: -390px;
-      top: 0;
-      bottom: 0;
-      width: 380px;
-      background: #0d0d15;
-      border-left: 1px solid rgba(255, 255, 255, .08);
-      z-index: 9998;
-      transition: right .3s cubic-bezier(.4, 0, .2, 1);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    #bundleSidebar.open {
-      right: 0
-    }
-
-    .sb-header {
-      padding: 20px 20px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, .07);
-      background: rgba(31, 184, 255, .05);
-      flex-shrink: 0
-    }
-
-    .sb-header-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px
-    }
-
-    .sb-title {
-      font-size: 1rem;
-      font-weight: 700;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      gap: 8px
-    }
-
-    .sb-title-icon {
-      width: 28px;
-      height: 28px;
-      border-radius: 8px;
-      background: rgba(31, 184, 255, .15);
-      border: 1px solid rgba(31, 184, 255, .3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: .9rem
-    }
-
-    .sb-sub {
-      font-size: .73rem;
-      color: rgba(255, 255, 255, .35);
-      margin-top: 2px
-    }
-
-    .sb-close {
-      background: rgba(255, 255, 255, .07);
-      border: 1px solid rgba(255, 255, 255, .1);
-      color: rgba(255, 255, 255, .5);
-      border-radius: 6px;
-      padding: 5px 8px;
-      cursor: pointer;
-      font-size: .72rem;
-      font-family: 'Inter', sans-serif;
-      transition: all .15s
-    }
-
-    .sb-close:hover {
-      background: rgba(255, 255, 255, .12);
-      color: #fff
-    }
-
-    .sb-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px
-    }
-
-    .sb-body::-webkit-scrollbar {
-      width: 4px
-    }
-
-    .sb-body::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, .12);
-      border-radius: 2px
-    }
-
-    .sb-label {
-      font-size: .65rem;
-      font-weight: 700;
-      color: rgba(255, 255, 255, .28);
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      margin-bottom: 4px
-    }
-
-    .sb-input {
-      width: 100%;
-      background: rgba(255, 255, 255, .06);
-      border: 1px solid rgba(255, 255, 255, .1);
-      color: #fff;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: .85rem;
-      font-family: 'Inter', sans-serif;
-      outline: none;
-      transition: border-color .2s
-    }
-
-    .sb-input:focus {
-      border-color: rgba(31, 184, 255, .4)
-    }
-
-    .sb-input::placeholder {
-      color: rgba(255, 255, 255, .25)
-    }
-
-    .ch-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      max-height: 260px;
-      overflow-y: auto
-    }
-
-    .ch-list::-webkit-scrollbar {
-      width: 3px
-    }
-
-    .ch-list::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, .1);
-      border-radius: 2px
-    }
-
-    .ch-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, .07);
-      background: rgba(255, 255, 255, .03);
-      cursor: pointer;
-      transition: all .15s
-    }
-
-    .ch-row:hover {
-      background: rgba(255, 255, 255, .07);
-      border-color: rgba(255, 255, 255, .12)
-    }
-
-    .ch-row.selected {
-      background: rgba(31, 184, 255, .08);
-      border-color: rgba(31, 184, 255, .25)
-    }
-
-    .ch-row-img {
-      width: 32px;
-      height: 32px;
-      border-radius: 6px;
-      object-fit: cover;
-      background: #1a1a1a;
-      flex-shrink: 0
-    }
-
-    .ch-row-name {
-      flex: 1;
-      font-size: .82rem;
-      color: rgba(255, 255, 255, .8)
-    }
-
-    .ch-row.selected .ch-row-name {
-      color: #fff
-    }
-
-    .ch-row-check {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(255, 255, 255, .2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: .65rem;
-      flex-shrink: 0;
-      transition: all .15s;
-      color: transparent
-    }
-
-    .ch-row.selected .ch-row-check {
-      background: #1fb8ff;
-      border-color: #1fb8ff;
-      color: #000
-    }
-
-    .sel-all-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 6px 2px;
-      border-bottom: 1px solid rgba(255, 255, 255, .07);
-      margin-bottom: 2px
-    }
-
-    .sel-all-lbl {
-      font-size: .78rem;
-      color: rgba(255, 255, 255, .5)
-    }
-
-    .sel-all-btn {
-      background: none;
-      border: 1px solid rgba(255, 255, 255, .15);
-      color: rgba(255, 255, 255, .6);
-      border-radius: 5px;
-      padding: 3px 10px;
-      font-size: .72rem;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      transition: all .15s
-    }
-
-    .sel-all-btn:hover {
-      background: rgba(255, 255, 255, .08);
-      color: #fff
-    }
-
-    .sel-count {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      background: rgba(31, 184, 255, .12);
-      border: 1px solid rgba(31, 184, 255, .25);
-      border-radius: 20px;
-      padding: 3px 10px;
-      font-size: .72rem;
-      color: #1fb8ff;
-      font-weight: 600
-    }
-
-    .sel-count-dot {
-      width: 5px;
-      height: 5px;
-      border-radius: 50%;
-      background: #1fb8ff
-    }
-
-    .sb-gen-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #1fb8ff, #0a7abf);
-      border: none;
-      border-radius: 10px;
-      padding: 13px;
-      font-size: .88rem;
-      font-weight: 700;
-      color: #fff;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      transition: all .2s
-    }
-
-    .sb-gen-btn:hover {
-      opacity: .9;
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(31, 184, 255, .25)
-    }
-
-    .sb-gen-btn:disabled {
-      opacity: .35;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none
-    }
-
-    #bundleResult {
-      display: none;
-      flex-direction: column;
-      gap: 10px
-    }
-
-    .bundle-url-box {
-      background: rgba(255, 255, 255, .04);
-      border: 1px solid rgba(31, 184, 255, .2);
-      border-radius: 8px;
-      padding: 10px 12px
-    }
-
-    .bundle-url-text {
-      font-size: .72rem;
-      color: rgba(255, 255, 255, .6);
-      word-break: break-all;
-      line-height: 1.6;
-      font-family: monospace;
-      max-height: 80px;
-      overflow-y: auto
-    }
-
-    .bundle-url-text::-webkit-scrollbar {
-      width: 3px
-    }
-
-    .bundle-url-text::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, .1);
-      border-radius: 2px
-    }
-
-    .bundle-actions {
-      display: flex;
-      gap: 8px
-    }
-
-    .bundle-copy-btn {
-      flex: 1;
-      background: rgba(31, 184, 255, .12);
-      border: 1px solid rgba(31, 184, 255, .3);
-      color: #1fb8ff;
-      border-radius: 8px;
-      padding: 9px;
-      font-size: .8rem;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      transition: all .15s
-    }
-
-    .bundle-copy-btn:hover {
-      background: rgba(31, 184, 255, .2)
-    }
-
-    .bundle-copy-btn.copied {
-      background: rgba(74, 222, 128, .12);
-      border-color: rgba(74, 222, 128, .3);
-      color: #4ade80
-    }
-
-    .bundle-open-btn {
-      flex: 1;
-      background: rgba(255, 255, 255, .07);
-      border: 1px solid rgba(255, 255, 255, .12);
-      color: #fff;
-      border-radius: 8px;
-      padding: 9px;
-      font-size: .8rem;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      transition: all .15s
-    }
-
-    .bundle-open-btn:hover {
-      background: rgba(255, 255, 255, .12)
-    }
-
-    .embed-box {
-      background: rgba(255, 255, 255, .03);
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: 8px;
-      padding: 12px
-    }
-
-    .embed-code {
-      font-family: monospace;
-      font-size: .7rem;
-      color: rgba(255, 255, 255, .55);
-      line-height: 1.7;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 120px;
-      overflow-y: auto
-    }
-
-    .embed-code::-webkit-scrollbar {
-      width: 3px
-    }
-
-    .embed-code::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, .1);
-      border-radius: 2px
-    }
-
-    .embed-copy-btn {
-      margin-top: 8px;
-      width: 100%;
-      background: rgba(255, 255, 255, .05);
-      border: 1px solid rgba(255, 255, 255, .1);
-      color: rgba(255, 255, 255, .6);
-      border-radius: 6px;
-      padding: 7px;
-      font-size: .75rem;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: 'Inter', sans-serif;
-      transition: all .15s
-    }
-
-    .embed-copy-btn:hover {
-      background: rgba(255, 255, 255, .09);
-      color: #fff
-    }
-
-    .sb-loading {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: rgba(255, 255, 255, .35);
-      font-size: .8rem;
-      padding: 8px 0
-    }
-
-    .sb-spin {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, .1);
-      border-top-color: #1fb8ff;
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-      flex-shrink: 0
-    }
-
-    .sb-err {
-      font-size: .78rem;
-      color: rgba(255, 100, 100, .7);
-      padding: 6px 0
-    }
-
-    .sb-footer {
-      padding: 12px 20px;
-      border-top: 1px solid rgba(255, 255, 255, .07);
-      flex-shrink: 0
-    }
-
-    .sb-footer-note {
-      font-size: .7rem;
-      color: rgba(255, 255, 255, .2);
-      line-height: 1.6;
-      text-align: center
-    }
-
-    .sb-footer-note b {
-      color: rgba(31, 184, 255, .5)
-    }
-
-    .sb-divider {
-      height: 1px;
-      background: rgba(255, 255, 255, .06)
-    }
-
-    /* permanent badge */
-    .perm-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: rgba(74, 222, 128, .1);
-      border: 1px solid rgba(74, 222, 128, .25);
-      border-radius: 12px;
-      padding: 3px 8px;
-      font-size: .65rem;
-      font-weight: 700;
-      color: #4ade80;
-      margin-top: 6px
-    }
-
     /* ══ PAUSE INFO OVERLAY (Netflix-style) ══ */
     #pauseInfo {
       position: absolute;
@@ -2240,83 +1771,6 @@
     </div>
   </div>
 
-  <button id="bundleToggle" onclick="toggleSidebar()">📦 BUNDLE</button>
-
-  <div id="bundleSidebar">
-    <div class="sb-header">
-      <div class="sb-header-row">
-        <div class="sb-title">
-          <div class="sb-title-icon">📦</div>
-          Channel Bundle
-        </div>
-        <button class="sb-close" onclick="toggleSidebar()">✕ Close</button>
-      </div>
-      <div class="sb-sub">Generate a permanent share URL for multiple channels</div>
-    </div>
-
-    <div class="sb-body">
-      <div>
-        <div class="sb-label">Bundle name</div>
-        <input class="sb-input" id="bundleName" placeholder="e.g. Star Sports Pack" maxlength="60" />
-      </div>
-
-      <div>
-        <div class="sb-label">Sportlink player URL</div>
-        <input class="sb-input" id="playerBaseUrl" placeholder="https://your-site.com/sportlink.html" value="" />
-      </div>
-
-      <div>
-        <div class="sb-label" style="margin-bottom:8px">Select channels</div>
-        <div id="sbChLoading" class="sb-loading">
-          <div class="sb-spin"></div>Loading channels…
-        </div>
-        <div id="sbChErr" class="sb-err" style="display:none">⚠ Could not load channels. <span
-            style="color:#1fb8ff;cursor:pointer" onclick="sbFetchChannels()">Retry</span></div>
-        <div id="sbChWrap" style="display:none">
-          <div class="sel-all-row">
-            <span class="sb-label" style="margin:0">
-              <span class="sel-count"><span class="sel-count-dot"></span><span id="selCountTxt">0 selected</span></span>
-            </span>
-            <button class="sel-all-btn" id="selAllBtn" onclick="toggleSelectAll()">Select all</button>
-          </div>
-          <div class="ch-list" id="sbChList"></div>
-        </div>
-      </div>
-
-      <div class="sb-divider"></div>
-
-      <button class="sb-gen-btn" id="genBtn" onclick="generateBundle()" disabled>
-        🔗 Generate Permanent Bundle URL
-      </button>
-
-      <div id="bundleResult">
-        <div class="sb-label">Bundle URL</div>
-        <div class="perm-badge">♾ Permanent — keys fetched fresh on every open</div>
-        <div class="bundle-url-box" style="margin-top:6px">
-          <div class="bundle-url-text" id="bundleUrlText"></div>
-        </div>
-        <div class="bundle-actions">
-          <button class="bundle-copy-btn" id="bundleCopyBtn" onclick="copyBundleUrl()">📋 Copy URL</button>
-          <button class="bundle-open-btn" onclick="openBundleUrl()">↗ Open</button>
-        </div>
-
-        <div class="sb-divider"></div>
-
-        <div class="sb-label">React embed snippet</div>
-        <div class="embed-box">
-          <div class="embed-code" id="embedSnippet"></div>
-          <button class="embed-copy-btn" onclick="copyEmbed()">Copy React snippet</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="sb-footer">
-      <div class="sb-footer-note">
-        URLs store only channel IDs. <b>Keys are always fetched fresh</b> — links never expire.
-      </div>
-    </div>
-  </div>
-
   <div id="player" class="show-ui">
     <video id="video" preload="metadata" playsinline></video>
     <div id="clickZone"></div>
@@ -2519,13 +1973,19 @@
               <div class="ditem" data-s="2">2x<span class="chk">✓</span></div>
             </div>
           </div>
-          <button class="ibtn" id="pipBtn">
+          <button class="ibtn" id="pipBtn" title="Picture in picture">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff">
               <path
                 d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z" />
             </svg>
           </button>
-          <button class="ibtn" id="fsBtn">
+          <button class="ibtn" id="rotBtn" title="Rotate screen">
+            <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
+              <path
+                d="M16.48 2.52c3.27 1.55 5.61 4.72 5.97 8.48h1.5C23.44 4.84 18.29 0 12 0l-.66.03 3.81 3.81 1.33-1.32zm-6.25-.77a1.996 1.996 0 0 0-2.73 0L2.24 6.99a1.996 1.996 0 0 0 0 2.73l10.26 10.26c.75.75 1.97.75 2.73 0l5.25-5.25c.75-.75.75-1.97 0-2.73L10.23 1.75zm-1.3 1.41c.11-.11.3-.11.41 0l10.26 10.26c.11.11.11.3 0 .41l-5.25 5.25c-.11.11-.3.11-.41 0L3.68 8.82c-.11-.11-.11-.3 0-.41l5.25-5.25zM7.52 21.48C4.25 19.94 1.91 16.76 1.55 13H.05C.56 19.16 5.71 24 12 24l.66-.03-3.81-3.81-1.33 1.32z" />
+            </svg>
+          </button>
+          <button class="ibtn" id="fsBtn" title="Fullscreen">
             <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff">
               <path id="fsPath" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
             </svg>
@@ -2545,7 +2005,7 @@
       const isMobile = window.innerWidth <= 768;
       if (isFramed) {
         const s = document.createElement('style');
-        s.textContent = '#bundleToggle{display:none!important}#backBtn{display:none!important}';
+        s.textContent = '#backBtn{display:none!important}';
         document.head.appendChild(s);
       }
       if (isLocal || isFramed || isMobile) { return; }
@@ -2777,7 +2237,7 @@
     const progBuf = $('progBuf'), progThumb = $('progThumb'), progTip = $('progTip');
     const timeLbl = $('timeLbl'), delayLbl = $('delayLbl');
     const liveBadge = $('liveBadge'), liveBadgeTxt = $('liveBadgeTxt');
-    const fsBtn = $('fsBtn'), fsPath = $('fsPath');
+    const fsBtn = $('fsBtn'), fsPath = $('fsPath'), rotBtn = $('rotBtn');
     const pipBtn = $('pipBtn'), qualBtn = $('qualBtn'), qualLbl = $('qualLbl'), qualMenu = $('qualMenu');
     const speedLbl = $('speedLbl'), speedMenu = $('speedMenu');
     const audioBtn = $('audioBtn'), audioLbl = $('audioLbl'), audioMenu = $('audioMenu'), audioWrap = $('audioWrap');
@@ -3904,80 +3364,6 @@
     }
 
     // ══════════════════════════════════════════════════════════
-    // BUNDLE URL HANDLER
-    // ══════════════════════════════════════════════════════════
-    async function handleBundleParam(bundleRaw) {
-      try {
-        const decoded = JSON.parse(dob(decodeURIComponent(bundleRaw)));
-        if (!decoded) throw new Error('Decode failed');
-
-        if (decoded.ids && decoded.ids.length > 0) {
-          showToast('⏳ Loading bundle…', 3000);
-          showLauncher();
-          let map;
-          try { map = await getChMap(); }
-          catch (e) { throw new Error('Could not fetch channel feed: ' + e.message); }
-
-          const resolved = decoded.ids.map(id => map[id]).filter(Boolean);
-          if (!resolved.length) {
-            errMsg.textContent = 'No channels found. Feed may have changed.';
-            err.style.display = 'flex';
-            return;
-          }
-          renderBundleChannels({ title: decoded.title, channels: resolved });
-          return;
-        }
-
-        if (decoded.channels && decoded.channels.length > 0) {
-          showToast('⏳ Loading bundle…', 2000);
-          showLauncher();
-          let map = {};
-          try { map = await getChMap(); } catch { }
-
-          const nameMap = {};
-          Object.values(map).forEach(ch => { nameMap[ch.name] = ch; });
-
-          const refreshed = decoded.channels.map(ch => {
-            const live = nameMap[ch.name];
-            if (live) return live;
-            return ch;
-          });
-          renderBundleChannels({ title: decoded.title, channels: refreshed });
-          return;
-        }
-
-        errMsg.textContent = 'Bundle is empty or invalid.';
-        err.style.display = 'flex';
-
-      } catch (e) {
-        console.error('Bundle param error:', e);
-        errMsg.textContent = 'Invalid bundle URL: ' + e.message;
-        err.style.display = 'flex';
-      }
-    }
-
-    function renderBundleChannels(bundle) {
-      channelsData = bundle.channels.map(ch => ({
-        id: ch.id || ch.name,
-        name: ch.name,
-        url: ch.url,
-        keyId: ch.keyId || '',
-        key: ch.key || '',
-        cookie: ch.cookie || '',
-        logo: ch.logo || '',
-      }));
-      channelsLoaded = true;
-      switchTab('live');
-      $('chLoading').style.display = 'none';
-      $('chErr').style.display = 'none';
-      renderChannelGrid();
-      $('chUpdated').innerHTML = `📦 Bundle: <b>${bundle.title || 'Channels'}</b> — ${channelsData.length} channels`;
-      $('chUpdated').style.display = 'block';
-      $('tabLive').textContent = `📺 ${bundle.title || 'Bundle'}`;
-      showLauncher();
-    }
-
-    // ══════════════════════════════════════════════════════════
     // SESSION SYSTEM
     // ══════════════════════════════════════════════════════════
     let SID = null, SROLE = null, SSTART = null, SURL = null, STITLE = null, SDRM = null, SCHID = null;
@@ -4707,7 +4093,7 @@
       const epsrc = q.get('epsrc');
       if (epsrc && !META.eps.length) loadEpsFrom(epsrc);
       // If episodes were supplied, boot straight into the current episode.
-      if (META.eps.length && !q.get('url') && !q.get('src') && !q.get('chid') && !q.get('bundle')) {
+      if (META.eps.length && !q.get('url') && !q.get('src') && !q.get('chid')) {
         const cur = META.eps[META.epIndex] || META.eps[0];
         if (cur && cur.u) {
           const label = (META.showTitle ? META.showTitle + ' · ' : '') + (cur.t || 'Episode ' + (META.epIndex + 1));
@@ -4715,9 +4101,6 @@
           return;
         }
       }
-
-      const bundleRaw = q.get('bundle');
-      if (bundleRaw) { await handleBundleParam(bundleRaw); return; }
 
       /* ?tab=live|sony|fc|bb opens the player on that list, so each tab has a
          link of its own to hand out — the same idea as a bundle URL, minus
@@ -4999,14 +4382,65 @@
     audioBtn.addEventListener('click', e => { e.stopPropagation(); audioMenu.classList.toggle('open'); qualMenu.classList.remove('open'); speedMenu.classList.remove('open') });
 
     // ══════════════════════════════════════════════════════════
-    // SPEED / FULLSCREEN / PIP / UI
+    // SPEED / FULLSCREEN / ROTATE / PIP / UI
     // ══════════════════════════════════════════════════════════
     speedLbl.addEventListener('click', e => { e.stopPropagation(); speedMenu.classList.toggle('open'); qualMenu.classList.remove('open'); audioMenu.classList.remove('open') });
     document.querySelectorAll('.ditem[data-s]').forEach(el => {
       el.addEventListener('click', e => { e.stopPropagation(); const s = parseFloat(el.dataset.s); vid.playbackRate = s; speedLbl.textContent = s === 1 ? '1x' : s + 'x'; document.querySelectorAll('.ditem[data-s]').forEach(x => x.classList.toggle('on', x === el)); speedMenu.classList.remove('open'); showToast('Speed: ' + (s === 1 ? 'Normal' : s + 'x')) });
     });
-    fsBtn.addEventListener('click', e => { e.stopPropagation(); if (!document.fullscreenElement) player.requestFullscreen().catch(() => { }); else document.exitFullscreen() });
+
+    /* ── FULLSCREEN ──
+       The player div is the fullscreen element, not the <video>, so the
+       controls stay visible when the native chrome is hidden. */
+    fsBtn.addEventListener('click', e => { e.stopPropagation(); toggleFullscreen(); });
+
+    function toggleFullscreen() {
+      const el = player;
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!isFs) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (req) req.call(el).catch(() => showToast('Fullscreen was blocked'));
+        else showToast('Fullscreen not supported');
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if (exit) exit.call(document).catch(() => { });
+      }
+    }
     document.addEventListener('fullscreenchange', () => fsPath.setAttribute('d', document.fullscreenElement ? P.fsoff : P.fson));
+    document.addEventListener('webkitfullscreenchange', () => fsPath.setAttribute('d', (document.fullscreenElement || document.webkitFullscreenElement) ? P.fsoff : P.fson));
+
+    /* ── ROTATE SCREEN ──
+       Cycles the video through 0° → 90° → 180° → 270° → 0°. The CSS classes
+       swap the element's box for the quarter turns, so a landscape stream can
+       be watched with the phone held upright and vice versa. Where the Screen
+       Orientation API exists we ask it to match; the browser is free to
+       refuse (it usually needs fullscreen), which is why the CSS turn is the
+       part that always happens. */
+    const ROT_CLASSES = ['rot-90', 'rot-180', 'rot-270'];
+    let _rotDeg = 0;
+
+    function applyRotation() {
+      vid.classList.remove(...ROT_CLASSES);
+      if (_rotDeg) vid.classList.add('rot-' + _rotDeg);
+      rotBtn.classList.toggle('on', _rotDeg !== 0);
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          if (_rotDeg === 0) screen.orientation.unlock();
+          else if (_rotDeg === 180) screen.orientation.lock('portrait').catch(() => { });
+          else screen.orientation.lock('landscape').catch(() => { });
+        }
+      } catch { /* unsupported or refused — the CSS turn stands on its own */ }
+    }
+
+    function rotateScreen() {
+      _rotDeg = (_rotDeg + 90) % 360;
+      applyRotation();
+      showUI();
+      showToast(_rotDeg === 0 ? '🔄 Rotation reset' : '🔄 Rotated ' + _rotDeg + '°', 1400);
+    }
+
+    rotBtn.addEventListener('click', e => { e.stopPropagation(); rotateScreen(); });
+
     pipBtn.addEventListener('click', async e => { e.stopPropagation(); try { if (document.pictureInPictureElement) await document.exitPictureInPicture(); else await vid.requestPictureInPicture() } catch { } });
     vid.addEventListener('waiting', () => spin.classList.add('on'));
     vid.addEventListener('canplay', () => spin.classList.remove('on'));
@@ -5028,144 +4462,18 @@
         case 'ArrowUp': e.preventDefault(); vid.volume = Math.min(1, vid.volume + .1); volSlider.value = vid.volume * 100; updVol(); showToast('Vol: ' + Math.round(vid.volume * 100) + '%'); break;
         case 'ArrowDown': e.preventDefault(); vid.volume = Math.max(0, vid.volume - .1); volSlider.value = vid.volume * 100; updVol(); showToast('Vol: ' + Math.round(vid.volume * 100) + '%'); break;
         case 'm': case 'M': vid.muted = !vid.muted; volSlider.value = vid.muted ? 0 : vid.volume * 100; updVol(); showToast(vid.muted ? '🔇 Muted' : '🔊 Unmuted'); break;
-        case 'f': case 'F': fsBtn.click(); break;
+        case 'f': case 'F': toggleFullscreen(); break;
+        case 'r': case 'R': rotateScreen(); break;
         case 'p': case 'P': pipBtn.click(); break;
         case 'l': case 'L': if (isLiveStream) jumpToLive(); break;
         case 's': case 'S': toggleSharePanel(); break;
       }
       showUI(); if (!vid.paused) schedHide();
     });
-
-    // ══════════════════════════════════════════════════════════
-    // SIDEBAR
-    // ══════════════════════════════════════════════════════════
-    let sbChannels = [], sbSelected = new Set(), sbLoaded = false;
-
-    function toggleSidebar() {
-      const sb = $('bundleSidebar');
-      const btn = $('bundleToggle');
-      const isOpen = sb.classList.contains('open');
-      sb.classList.toggle('open', !isOpen);
-      btn.classList.toggle('open', !isOpen);
-      if (!isOpen && !sbLoaded) sbFetchChannels();
-    }
-
-    async function sbFetchChannels() {
-      const loading = $('sbChLoading');
-      const errEl = $('sbChErr');
-      const wrap = $('sbChWrap');
-      loading.style.display = 'flex'; errEl.style.display = 'none'; wrap.style.display = 'none';
-      try {
-        const map = await getChMap();
-        const channels = Object.values(map);
-        if (!channels.length) throw new Error('No channels');
-        sbChannels = channels;
-        sbLoaded = true;
-        loading.style.display = 'none';
-        wrap.style.display = 'block';
-        renderSbChannels();
-      } catch (e) {
-        loading.style.display = 'none';
-        errEl.style.display = 'block';
-        console.error(e);
-      }
-    }
-
-    function renderSbChannels() {
-      const list = $('sbChList');
-      list.innerHTML = '';
-      sbChannels.forEach((ch, i) => {
-        const row = document.createElement('div');
-        row.className = 'ch-row';
-        row.dataset.idx = i;
-        row.innerHTML = `
-      <img class="ch-row-img" src="${ch.logo}" alt="${ch.name}"
-        onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 fill=%22%231a1a1a%22/><text x=%2216%22 y=%2220%22 text-anchor=%22middle%22 fill=%22%23444%22 font-size=%2212%22>📺</text></svg>'">
-      <span class="ch-row-name">${ch.name}</span>
-      <div class="ch-row-check">✓</div>`;
-        row.onclick = () => toggleCh(i, row);
-        list.appendChild(row);
-      });
-      updateSelCount();
-    }
-
-    function toggleCh(i, row) {
-      if (sbSelected.has(i)) { sbSelected.delete(i); row.classList.remove('selected') }
-      else { sbSelected.add(i); row.classList.add('selected') }
-      updateSelCount();
-    }
-
-    function toggleSelectAll() {
-      const allSelected = sbSelected.size === sbChannels.length;
-      sbSelected.clear();
-      document.querySelectorAll('.ch-row').forEach((row, i) => {
-        if (!allSelected) { sbSelected.add(i); row.classList.add('selected') }
-        else row.classList.remove('selected');
-      });
-      updateSelCount();
-    }
-
-    function updateSelCount() {
-      const n = sbSelected.size;
-      $('selCountTxt').textContent = n + ' selected';
-      $('selAllBtn').textContent = n === sbChannels.length ? 'Deselect all' : 'Select all';
-      $('genBtn').disabled = n === 0;
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // BUNDLE GENERATION
-    // ══════════════════════════════════════════════════════════
-    let _lastBundleUrl = '';
-
-    function generateBundle() {
-      if (sbSelected.size === 0) return;
-      const base = $('playerBaseUrl').value.trim() || window.location.origin + window.location.pathname;
-      const name = $('bundleName').value.trim() || 'Channel Bundle';
-      const ids = [];
-      sbSelected.forEach(i => { const ch = sbChannels[i]; if (ch.id) ids.push(ch.id); });
-      const payload = JSON.stringify({ title: name, ids });
-      const encoded = obf(payload);
-      const finalUrl = `${base}?bundle=${encodeURIComponent(encoded)}`;
-      _lastBundleUrl = finalUrl;
-      $('bundleUrlText').textContent = finalUrl;
-      const snippet = `import SportlinkPlayer from './SportlinkPlayer';\n\n// ${name}\nexport default function App() {\n  return (\n    <SportlinkPlayer\n      bundleUrl="${finalUrl}"\n      title="${name}"\n      autoPlay={true}\n    />\n  );\n}`;
-      $('embedSnippet').textContent = snippet;
-      $('bundleResult').style.display = 'flex';
-    }
-
-    function copyBundleUrl() {
-      navigator.clipboard.writeText(_lastBundleUrl).then(() => {
-        const btn = $('bundleCopyBtn');
-        btn.textContent = '✅ Copied!'; btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = '📋 Copy URL'; btn.classList.remove('copied') }, 2000);
-      }).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = _lastBundleUrl; document.body.appendChild(ta); ta.select();
-        document.execCommand('copy'); document.body.removeChild(ta);
-        $('bundleCopyBtn').textContent = '✅ Copied!';
-        setTimeout(() => $('bundleCopyBtn').textContent = '📋 Copy URL', 2000);
-      });
-    }
-
-    function openBundleUrl() { window.open(_lastBundleUrl, '_blank') }
-
-    function copyEmbed() {
-      const code = $('embedSnippet').textContent;
-      navigator.clipboard.writeText(code).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = code; document.body.appendChild(ta); ta.select();
-        document.execCommand('copy'); document.body.removeChild(ta);
-      });
-      const btn = event.target;
-      btn.textContent = '✅ Copied!';
-      setTimeout(() => btn.textContent = 'Copy React snippet', 2000);
-    }
-
-    $('playerBaseUrl').value = window.location.origin + window.location.pathname;
   </script>
 
-  <script async src="https://pl31358401.profitableratecpmnetwork.com/a3/81/41/a38141b4ff99f6ef8dbf9dc5f76bd86b.js"></script> 
-  
+  <script async src="https://pl31358401.profitableratecpmnetwork.com/a3/81/41/a38141b4ff99f6ef8dbf9dc5f76bd86b.js"></script>
+
 </body>
 
 
