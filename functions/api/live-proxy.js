@@ -1,211 +1,121 @@
-/* functions/api/live-proxy.js — Cloudflare Pages Function.
+/* Cloudflare Pages Function — public endpoint.
  *
- * Same tunnelfetch / cloudflare:sockets approach as the Worker version, so
- * SonyLiv CDN requests egress through an Indian residential proxy instead of
- * a Cloudflare datacenter IP.
+ * The residential-proxy hop is delegated to a Node relay (see Part 2).
+ * Cloudflare Workers cannot fetch through an arbitrary HTTP proxy:
+ * fetch() has no proxy option, and cloudflare:sockets' startTls() verifies
+ * the peer certificate against the proxy hostname, not the origin, so a
+ * CONNECT tunnel to an HTTPS origin fails closed. See tunnelfetch's
+ * analysis for the measured details.
  *
- * Public URL:
- *   /api/live-proxy?url=<encoded>[&cookie=][&ref=][&ua=][&via=host:port]
- *
- * Deployed under a Pages project, this runs on the same origin as the
- * front-end, so same-origin requests are allowed implicitly. Requests from
- * other origins are checked against ALLOWED_ORIGINS.
+ * So this function handles:
+ *   - the allowlist and CORS
+ *   - direct fetches (FanCode, which is geographic-only and works from bom1)
+ *   - playlist rewriting for all branches
+ *   - forwarding to the relay for hosts that need a residential IP
  */
-import { Client } from 'tunnelfetch';
-import { connect } from 'cloudflare:sockets';
 
 const DEFAULT_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-/* Extra front-ends allowed to call this function from a different origin.
- * Same-origin callers (the Pages host this function is deployed on) are
- * always allowed — see requestOrigin(). */
-const ALLOWED_ORIGINS = [
-  'https://sportlink10-ajp.pages.dev',
-  'https://sportlink18-web.pages.dev',
-];
+const ALLOWED = ['fancode.com', 'akamaized.net', 'hotstar.com', 'jio.com'];
 
-const ALLOWED = [
-  'cloudplay-sonyliv.pages.dev',
-  'slivcdn.com',
-  'dishmt.slivcdn.com',
-  'akamaized.net',
-  'sonydaimenew.akamaized.net',
-];
+const NEEDS_RESIDENTIAL = ['sonydaimenew.akamaized.net', 'hotstar.com'];
 
-const NEEDS_RESIDENTIAL = [
-  'cloudplay-sonyliv.pages.dev',
-  'slivcdn.com',
-  'dishmt.slivcdn.com',
-  'sonydaimenew.akamaized.net',
-];
+/* The relay's public URL. Set this in Pages → Settings → Environment
+   variables as RELAY_URL. */
+const RELAY_URL = 'https://your-relay.up.railway.app/api/relay';
 
-/* If you have a paid residential provider, set this as a Pages env var
-   (Settings → Environment variables → PROXY_ENDPOINT). Format:
-     host:port
-   or
-     user:pass@host:port
-   When set, the free list is skipped entirely. */
-const PROXY_LIST =
-  'https://raw.githubusercontent.com/databay-labs/free-proxy-list/master/by-country/in/http.txt';
-
-const MAX_POOL = 500;
-const MAX_TRY = 24;
-const BATCH = 4;
-const PROXY_TIMEOUT_MS = 7000;
+const MAX_REDIRECTS = 5;
 const UPSTREAM_TIMEOUT_MS = 15000;
 
 const allowed = (h) => ALLOWED.some(s => h === s || h.endsWith('.' + s));
 const needsResidential = (h) => NEEDS_RESIDENTIAL.some(s => h === s || h.endsWith('.' + s));
 
-// ── origin guard ────────────────────────────────────────────
-/* Same-origin (the Pages host this function runs on) is always allowed;
-   that is where the front-end lives. Cross-origin callers must be in
-   ALLOWED_ORIGINS. */
-function requestOrigin(request) {
-  const reqHost = new URL(request.url).host;
-  const selfOrigins = [`https://${reqHost}`];
+const XML_ESCAPES = { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' };
+const escapeXml = (s) => s.replace(/[<>&'"]/g, c => XML_ESCAPES[c]);
 
-  const check = (value) => {
-    if (!value) return null;
-    try {
-      const o = new URL(value).origin;
-      if (selfOrigins.includes(o)) return o;
-      return ALLOWED_ORIGINS.includes(o) ? o : null;
-    } catch { return null; }
-  };
-
-  const origin = request.headers.get('Origin');
-  if (origin) return check(origin);
-
-  const referer = request.headers.get('Referer');
-  if (referer) return check(referer);
-
-  /* No Origin and no Referer. That happens for:
-     - Safari's native HLS media element doing a cross-origin fetch
-     - curl / Node clients
-     - direct URL visits
-     Same-origin <video> in Safari sends neither, so treat this as same-origin
-     rather than reject. If you want to require a header, return null here. */
-  return selfOrigins[0];
-}
-
-function corsHeaders(matchedOrigin) {
+function corsHeaders() {
   return {
-    'Access-Control-Allow-Origin': matchedOrigin,
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': '*',
-    'Access-Control-Expose-Headers': 'X-Proxy-Via, X-Proxy-Upstream, Content-Range, Accept-Ranges',
-    'Vary': 'Origin',
   };
 }
 
-// ── proxy pool ──────────────────────────────────────────────
-let pool = { list: [], at: 0 };
-let known = new Map(); // hostname -> proxy that last worked for it
+/* fetch with one deadline across the whole redirect chain, every hop
+   re-checked against the allowlist. */
+async function fetchBounded(url, headers, deadline, hops = 0) {
+  if (hops > MAX_REDIRECTS) throw new Error('Too many redirects');
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new Error('Upstream deadline exceeded');
 
-async function proxyList(env) {
-  const paid = env?.PROXY_ENDPOINT || '';
-  if (paid) return [paid];
-
-  if (pool.list.length && Date.now() - pool.at < 15 * 60_000) return pool.list;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), remaining);
   try {
-    const r = await fetch(PROXY_LIST, { cache: 'no-store' });
-    const txt = await r.text();
-    const list = txt.split('\n').map(l => l.trim())
-      .filter(l => /^\d{1,3}(\.\d{1,3}){3}:\d{2,5}$/.test(l))
-      .slice(0, MAX_POOL);
-    if (list.length) pool = { list, at: Date.now() };
-  } catch { /* keep whatever we had */ }
-  return pool.list;
-}
+    const r = await fetch(url, { headers, redirect: 'manual', signal: controller.signal });
+    const isRedirect = r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400);
+    if (!isRedirect) return r;
 
-function proxiedFetch(proxyHostPort) {
-  return new Client({
-    connect,
-    proxy: `http://${proxyHostPort}`,
-  });
-}
-
-async function findProxy(url, headers, hostname, env) {
-  const list = await proxyList(env);
-  if (!list.length) return null;
-
-  const remembered = known.get(hostname);
-  const ordered = remembered ? [remembered, ...list.filter(p => p !== remembered)] : list;
-  const cap = Math.min(ordered.length, MAX_TRY);
-
-  for (let i = 0; i < cap; i += BATCH) {
-    const batch = ordered.slice(i, Math.min(i + BATCH, cap));
-    const hit = await Promise.any(batch.map(async (p) => {
-      const client = proxiedFetch(p);
-      const r = await client.fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
-      });
-      if (!r.ok) throw new Error(String(r.status));
-      return { proxy: p, res: r };
-    })).catch(() => null);
-    if (hit) { known.set(hostname, hit.proxy); return hit; }
+    const loc = r.headers.get('location');
+    if (!loc) throw new Error('Redirect with no readable Location');
+    const next = new URL(loc, url);
+    if (!allowed(next.hostname)) throw new Error('Redirect to disallowed host: ' + next.hostname);
+    return fetchBounded(next.toString(), headers, deadline, hops + 1);
+  } finally {
+    clearTimeout(tid);
   }
-  return null;
 }
 
-/* A 200 from a public proxy is not proof of a 200 from the origin. Verify
-   playlist bodies actually start with #EXTM3U before rewriting them. */
-async function fetchWithSanity(client, url, headers, expectPlaylist) {
-  const r = await client.fetch(url, {
-    headers,
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+/* Forward to the Node relay, which has undici and can do the real proxy hop. */
+async function fetchViaRelay(target, headers, cookie, ref, ua) {
+  const relayUrl = new URL(RELAY_URL);
+  relayUrl.searchParams.set('url', target);
+
+  const relayHeaders = {
+    'User-Agent': headers['User-Agent'],
+    'Referer': headers['Referer'],
+    'Origin': headers['Origin'],
+    'Accept': '*/*',
+    ...(cookie ? { Cookie: cookie } : {}),
+  };
+
+  const r = await fetch(relayUrl.toString(), {
+    headers: relayHeaders,
+    signal: AbortSignal.timeout(20000),
   });
-  if (!r.ok || !expectPlaylist) return r;
-  const text = await r.text();
-  if (!/^\s*#EXTM3U/.test(text)) {
-    throw new Error('proxy returned non-HLS body');
-  }
-  return new Response(text, { status: r.status, headers: r.headers });
+
+  // The relay passes X-Proxy-Via back so the playlist can pin segments.
+  return r;
 }
 
-// ── handler ─────────────────────────────────────────────────
 export async function onRequest(context) {
   const { request, env } = context;
-  const reqUrl = new URL(request.url);
-  const matchedOrigin = requestOrigin(request);
 
   if (request.method === 'OPTIONS') {
-    if (!matchedOrigin) return new Response(null, { status: 403 });
-    return new Response(null, { status: 204, headers: corsHeaders(matchedOrigin) });
+    return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
-  if (!matchedOrigin) {
-    return new Response('Forbidden: origin not allowed', {
-      status: 403,
-      headers: { 'Content-Type': 'text/plain' },
-    });
-  }
+  const url = new URL(request.url);
+  const target = url.searchParams.get('url') || '';
+  const cookie = url.searchParams.get('cookie') || '';
+  const ref = url.searchParams.get('ref') || '';
+  const ua = url.searchParams.get('ua') || '';
+  const via = url.searchParams.get('via') || '';
 
-  const cors = corsHeaders(matchedOrigin);
-
-  const target = reqUrl.searchParams.get('url');
-  const cookie = reqUrl.searchParams.get('cookie') || '';
-  const ref = reqUrl.searchParams.get('ref') || '';
-  const ua = reqUrl.searchParams.get('ua') || '';
-  const via = reqUrl.searchParams.get('via') || '';
-
-  if (!target) return new Response('Missing ?url=', { status: 400, headers: cors });
+  if (!target) return new Response('Missing ?url=', { status: 400, headers: corsHeaders() });
 
   let targetUrl;
-  try { targetUrl = new URL(target); } catch {
-    return new Response('Invalid url', { status: 400, headers: cors });
-  }
+  try { targetUrl = new URL(target); }
+  catch { return new Response('Invalid url', { status: 400, headers: corsHeaders() }); }
+
   if (!allowed(targetUrl.hostname)) {
-    return new Response('Host not allowed', { status: 403, headers: cors });
+    return new Response('Host not allowed', { status: 403, headers: corsHeaders() });
   }
 
   let refOrigin = targetUrl.origin;
   if (ref) { try { refOrigin = new URL(ref).origin; } catch { /* keep */ } }
 
-  const headers = {
+  const fwdHeaders = {
     'User-Agent': ua || DEFAULT_UA,
     'Referer': ref || targetUrl.origin + '/',
     'Origin': refOrigin,
@@ -213,93 +123,89 @@ export async function onRequest(context) {
     ...(cookie ? { Cookie: cookie } : {}),
   };
 
-  const lowerPath = targetUrl.pathname.toLowerCase();
-  const isPlaylistPath = lowerPath.endsWith('.m3u8');
-  const isDashPath = lowerPath.endsWith('.mpd');
-  const incomingRange = request.headers.get('Range');
-  if (incomingRange && !isPlaylistPath && !isDashPath) {
-    headers['Range'] = incomingRange;
-  }
+  const range = request.headers.get('range');
+  if (range) fwdHeaders['Range'] = range;
 
-  let upstream, usedProxy = '';
-  const expectPlaylist = isPlaylistPath;
+  let upstream;
+  let usedProxy = '';
 
   try {
-    if (via) {
-      usedProxy = via;
-      try {
-        const client = proxiedFetch(via);
-        upstream = await fetchWithSanity(client, targetUrl.toString(), headers, expectPlaylist);
-        if (!upstream.ok && needsResidential(targetUrl.hostname)) throw new Error('via failed');
-      } catch {
-        if (!needsResidential(targetUrl.hostname)) throw new Error('via failed');
-        const hit = await findProxy(targetUrl.toString(), headers, targetUrl.hostname, env);
-        if (hit) {
-          usedProxy = hit.proxy;
-          const client = proxiedFetch(hit.proxy);
-          upstream = await fetchWithSanity(client, targetUrl.toString(), headers, expectPlaylist);
-        } else {
-          upstream = await fetch(targetUrl.toString(), {
-            headers, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-          });
-        }
-      }
-    } else if (needsResidential(targetUrl.hostname)) {
-      const hit = await findProxy(targetUrl.toString(), headers, targetUrl.hostname, env);
-      if (hit) {
-        usedProxy = hit.proxy;
-        const client = proxiedFetch(hit.proxy);
-        upstream = await fetchWithSanity(client, targetUrl.toString(), headers, expectPlaylist);
-      } else {
-        upstream = await fetch(targetUrl.toString(), {
-          headers, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-        });
-      }
+    if (needsResidential(targetUrl.hostname)) {
+      // Route through the Node relay, which speaks to the residential proxy.
+      upstream = await fetchViaRelay(
+        targetUrl.toString(),
+        fwdHeaders,
+        cookie,
+        ref,
+        ua,
+      );
+      usedProxy = upstream.headers.get('X-Proxy-Via') || '';
+    } else if (via) {
+      /* A pinned segment from a playlist — go through the relay with the
+         pin so the relay doesn't have to search the pool again. */
+      upstream = await fetchViaRelay(
+        targetUrl.toString(),
+        fwdHeaders,
+        cookie,
+        ref,
+        ua,
+      );
+      usedProxy = upstream.headers.get('X-Proxy-Via') || via;
     } else {
-      upstream = await fetch(targetUrl.toString(), {
-        headers, signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-      });
+      // FanCode: geographic block only, and bom1 clears it.
+      upstream = await fetchBounded(
+        targetUrl.toString(),
+        fwdHeaders,
+        Date.now() + UPSTREAM_TIMEOUT_MS,
+      );
     }
   } catch (e) {
-    return new Response('Upstream failed: ' + e.message, { status: 502, headers: cors });
-  }
-
-  const respHeaders = new Headers(cors);
-  if (usedProxy) respHeaders.set('X-Proxy-Via', usedProxy);
-
-  const ar = upstream.headers.get('Accept-Ranges');
-  if (ar) respHeaders.set('Accept-Ranges', ar);
-  const cr = upstream.headers.get('Content-Range');
-  if (cr) respHeaders.set('Content-Range', cr);
-
-  if (!upstream.ok) {
-    const body = await upstream.text();
-    respHeaders.set('X-Proxy-Upstream', String(upstream.status));
-    return new Response(body.slice(0, 2000), {
-      status: upstream.status,
-      headers: respHeaders,
+    return new Response('Upstream failed: ' + e.message, {
+      status: 502,
+      headers: corsHeaders(),
     });
   }
 
+  const outHeaders = { ...corsHeaders() };
+  if (usedProxy) outHeaders['X-Proxy-Via'] = usedProxy;
+
+  if (!upstream.ok) {
+    const body = await upstream.text();
+    outHeaders['X-Upstream-Status'] = String(upstream.status);
+    return new Response(body.slice(0, 2000), { status: upstream.status, headers: outHeaders });
+  }
+
+  const ar = upstream.headers.get('accept-ranges');
+  if (ar) outHeaders['Accept-Ranges'] = ar;
+  const cr = upstream.headers.get('content-range');
+  if (cr) outHeaders['Content-Range'] = cr;
+  if (upstream.status === 206) {
+    const cl = upstream.headers.get('content-length');
+    if (cl) outHeaders['Content-Length'] = cl;
+  }
+
   const ct = upstream.headers.get('content-type') || '';
-  const isPlaylist = lowerPath.endsWith('.m3u8') || ct.includes('mpegurl');
-  const isDash = lowerPath.endsWith('.mpd') || ct.includes('dash+xml');
+  const path = targetUrl.pathname.toLowerCase();
+  const isPlaylist = path.endsWith('.m3u8') || ct.includes('mpegurl');
+  const isDash = path.endsWith('.mpd') || ct.includes('dash+xml');
 
   if (isDash) {
     let xml = await upstream.text();
-    const dir = targetUrl.href.slice(0, targetUrl.href.lastIndexOf('/') + 1);
-    if (!/<BaseURL>\s*https?:/i.test(xml)) {
-      xml = xml.replace(/(<MPD\b[^>]*>)/i, `$1<BaseURL>${dir}</BaseURL>`);
+    // Inject only when there is no BaseURL at all. A relative BaseURL is
+    // still a BaseURL, and a second MPD-level one would shadow it.
+    if (!/<BaseURL\b/i.test(xml)) {
+      const dir = targetUrl.href.slice(0, targetUrl.href.lastIndexOf('/') + 1) + targetUrl.search;
+      xml = xml.replace(/(<MPD\b[^>]*>)/i, `$1<BaseURL>${escapeXml(dir)}</BaseURL>`);
     }
-    respHeaders.set('Content-Type', 'application/dash+xml');
-    respHeaders.set('Cache-Control', 'no-cache');
-    return new Response(xml, { status: 200, headers: respHeaders });
+    return new Response(xml, {
+      status: 200,
+      headers: { ...outHeaders, 'Content-Type': 'application/dash+xml', 'Cache-Control': 'no-cache' },
+    });
   }
 
   if (isPlaylist) {
     const text = await upstream.text();
-    // CHANGED vs Worker: base path is /api/live-proxy, not /
-    const base = `https://${reqUrl.host}/api/live-proxy?url=`;
+    const base = `https://${url.host}/api/live-proxy`;
     const extras =
       (cookie ? '&cookie=' + encodeURIComponent(cookie) : '') +
       (ref ? '&ref=' + encodeURIComponent(ref) : '') +
@@ -312,23 +218,30 @@ export async function onRequest(context) {
       if (!u.search && parentQuery) u.search = parentQuery;
       return u.toString();
     };
-    const wrap = (abs) => base + encodeURIComponent(abs) + extras;
+    const wrap = (abs) => base + '?url=' + encodeURIComponent(abs) + extras;
 
     const body = text.split('\n').map((line) => {
       const t = line.trim();
       if (!t) return line;
-      if (t.startsWith('#')) return line.replace(/URI="([^"]+)"/g, (_, u) => `URI="${wrap(toAbs(u))}"`);
+      if (t.startsWith('#')) {
+        return line.replace(/URI="([^"]+)"/g, (_, u) => `URI="${wrap(toAbs(u))}"`);
+      }
       return wrap(toAbs(t));
     }).join('\n');
 
-    respHeaders.set('Content-Type', 'application/vnd.apple.mpegurl');
-    respHeaders.set('Cache-Control', 'no-cache');
-    return new Response(body, { status: 200, headers: respHeaders });
+    return new Response(body, {
+      status: 200,
+      headers: { ...outHeaders, 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-cache' },
+    });
   }
 
-  respHeaders.set('Content-Type', ct || 'application/octet-stream');
-  respHeaders.set('Cache-Control', upstream.headers.get('cache-control') || 'no-cache');
-  const cl = upstream.headers.get('content-length');
-  if (cl) respHeaders.set('Content-Length', cl);
-  return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+  // Segments and keys — stream the body through, preserve 206.
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      ...outHeaders,
+      'Content-Type': ct || 'application/octet-stream',
+      'Cache-Control': upstream.headers.get('cache-control') || 'no-cache',
+    },
+  });
 }
