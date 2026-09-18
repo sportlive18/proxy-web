@@ -17,7 +17,15 @@
 const DEFAULT_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-const ALLOWED = ['fancode.com', 'akamaized.net', 'hotstar.com', 'jio.com'];
+const ALLOWED = [
+  'fancode.com',
+  'akamaized.net',
+  'hotstar.com',
+  'jio.com',
+  'cloudplay-sonyliv.pages.dev', // auto-updating SonyLIV playlist host
+  'slivcdn.com',                 // SonyLIV CDN (covers dishmt.slivcdn.com too)
+  'dishmt.slivcdn.com',
+];
 
 const NEEDS_RESIDENTIAL = ['sonydaimenew.akamaized.net', 'hotstar.com'];
 
