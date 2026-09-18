@@ -1,38 +1,17 @@
-/* Cloudflare Pages Function — converted from the Vercel/Node handler.
+/* Cloudflare Pages Function — public endpoint.
  *
- * One structural difference from the Node version: Cloudflare Workers
- * cannot fetch through an arbitrary HTTP proxy.
+ * The residential-proxy hop is delegated to a Node relay (see Part 2).
+ * Cloudflare Workers cannot fetch through an arbitrary HTTP proxy:
+ * fetch() has no proxy option, and cloudflare:sockets' startTls() verifies
+ * the peer certificate against the proxy hostname, not the origin, so a
+ * CONNECT tunnel to an HTTPS origin fails closed. See tunnelfetch's
+ * analysis for the measured details.
  *
- * Workers' fetch() resolves the URL's own hostname and sends an origin-form
- * request (GET /path, Host: target). There is no dispatcher / ProxyAgent
- * equivalent, and pointing fetch at the proxy host — fetch(`http://${proxy}/${url}`)
- * — does NOT produce the absolute-form request line (GET http://target/path)
- * that a forward HTTP proxy expects. It produces a request to the proxy's
- * own web server for a path that happens to look like a URL. So the
- * residential-proxy fallback from the Node version cannot be reproduced
- * here, and the previous conversion's getViaProxy() was a no-op dressed up
- * as a proxy hop.
- *
- * Practical consequence: SonyLiv and Hotstar, which refuse hosted networks,
- * will 403 from this deployment the way they 403 from any datacenter. If
- * you need them, the proxy hop has to live somewhere that can actually
- * speak to a forward proxy — the Node handler, or a relay you run — and
- * this function should forward to it.
- *
- * ?via= is still accepted for URL compatibility and ignored.
- *
- * Everything else from the Node version is preserved, plus fixes carried
- * over from the original:
- *   - allowlist (unchanged)
- *   - Range forwarded; Content-Range / Accept-Ranges / Content-Length
- *     passed back, so #EXT-X-BYTERANGE and DASH SegmentBase work
- *   - redirects followed manually, allowlist re-checked per hop, one
- *     deadline across the whole chain
- *   - DASH BaseURL injected only when no BaseURL exists at all (the
- *     previous /<BaseURL>\s*https?:/ guard let a relative BaseURL through
- *     and then shadowed it with a second MPD-level BaseURL)
- *   - DASH BaseURL carries the manifest query, matching the HLS path
- *   - segment bodies streamed through
+ * So this function handles:
+ *   - the allowlist and CORS
+ *   - direct fetches (FanCode, which is geographic-only and works from bom1)
+ *   - playlist rewriting for all branches
+ *   - forwarding to the relay for hosts that need a residential IP
  */
 
 const DEFAULT_UA =
@@ -40,10 +19,17 @@ const DEFAULT_UA =
 
 const ALLOWED = ['fancode.com', 'akamaized.net', 'hotstar.com', 'jio.com'];
 
+const NEEDS_RESIDENTIAL = ['sonydaimenew.akamaized.net', 'hotstar.com'];
+
+/* The relay's public URL. Set this in Pages → Settings → Environment
+   variables as RELAY_URL. */
+const RELAY_URL = 'https://your-relay.up.railway.app/api/relay';
+
 const MAX_REDIRECTS = 5;
 const UPSTREAM_TIMEOUT_MS = 15000;
 
 const allowed = (h) => ALLOWED.some(s => h === s || h.endsWith('.' + s));
+const needsResidential = (h) => NEEDS_RESIDENTIAL.some(s => h === s || h.endsWith('.' + s));
 
 const XML_ESCAPES = { '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' };
 const escapeXml = (s) => s.replace(/[<>&'"]/g, c => XML_ESCAPES[c]);
@@ -56,9 +42,8 @@ function corsHeaders() {
   };
 }
 
-/* fetch with one deadline across the whole redirect chain, and every hop
-   re-checked against the allowlist. Without redirect: 'manual', a 302 from
-   an allowlisted host is a way to make this proxy reach anything. */
+/* fetch with one deadline across the whole redirect chain, every hop
+   re-checked against the allowlist. */
 async function fetchBounded(url, headers, deadline, hops = 0) {
   if (hops > MAX_REDIRECTS) throw new Error('Too many redirects');
   const remaining = deadline - Date.now();
@@ -67,45 +52,57 @@ async function fetchBounded(url, headers, deadline, hops = 0) {
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), remaining);
   try {
-    const r = await fetch(url, {
-      headers,
-      redirect: 'manual',
-      signal: controller.signal,
-    });
-
-    const isRedirect =
-      r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400);
+    const r = await fetch(url, { headers, redirect: 'manual', signal: controller.signal });
+    const isRedirect = r.type === 'opaqueredirect' || (r.status >= 300 && r.status < 400);
     if (!isRedirect) return r;
 
     const loc = r.headers.get('location');
     if (!loc) throw new Error('Redirect with no readable Location');
     const next = new URL(loc, url);
-    if (!allowed(next.hostname)) {
-      throw new Error('Redirect to disallowed host: ' + next.hostname);
-    }
+    if (!allowed(next.hostname)) throw new Error('Redirect to disallowed host: ' + next.hostname);
     return fetchBounded(next.toString(), headers, deadline, hops + 1);
   } finally {
     clearTimeout(tid);
   }
 }
 
+/* Forward to the Node relay, which has undici and can do the real proxy hop. */
+async function fetchViaRelay(target, headers, cookie, ref, ua) {
+  const relayUrl = new URL(RELAY_URL);
+  relayUrl.searchParams.set('url', target);
+
+  const relayHeaders = {
+    'User-Agent': headers['User-Agent'],
+    'Referer': headers['Referer'],
+    'Origin': headers['Origin'],
+    'Accept': '*/*',
+    ...(cookie ? { Cookie: cookie } : {}),
+  };
+
+  const r = await fetch(relayUrl.toString(), {
+    headers: relayHeaders,
+    signal: AbortSignal.timeout(20000),
+  });
+
+  // The relay passes X-Proxy-Via back so the playlist can pin segments.
+  return r;
+}
+
 export async function onRequest(context) {
-  const { request } = context;
+  const { request, env } = context;
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
   const url = new URL(request.url);
-  const target = url.searchParams.get('url')    || '';
+  const target = url.searchParams.get('url') || '';
   const cookie = url.searchParams.get('cookie') || '';
-  const ref    = url.searchParams.get('ref')    || '';
-  const ua     = url.searchParams.get('ua')     || '';
-  // ?via= accepted but ignored — see header comment.
+  const ref = url.searchParams.get('ref') || '';
+  const ua = url.searchParams.get('ua') || '';
+  const via = url.searchParams.get('via') || '';
 
-  if (!target) {
-    return new Response('Missing ?url=', { status: 400, headers: corsHeaders() });
-  }
+  if (!target) return new Response('Missing ?url=', { status: 400, headers: corsHeaders() });
 
   let targetUrl;
   try { targetUrl = new URL(target); }
@@ -130,12 +127,38 @@ export async function onRequest(context) {
   if (range) fwdHeaders['Range'] = range;
 
   let upstream;
+  let usedProxy = '';
+
   try {
-    upstream = await fetchBounded(
-      targetUrl.toString(),
-      fwdHeaders,
-      Date.now() + UPSTREAM_TIMEOUT_MS,
-    );
+    if (needsResidential(targetUrl.hostname)) {
+      // Route through the Node relay, which speaks to the residential proxy.
+      upstream = await fetchViaRelay(
+        targetUrl.toString(),
+        fwdHeaders,
+        cookie,
+        ref,
+        ua,
+      );
+      usedProxy = upstream.headers.get('X-Proxy-Via') || '';
+    } else if (via) {
+      /* A pinned segment from a playlist — go through the relay with the
+         pin so the relay doesn't have to search the pool again. */
+      upstream = await fetchViaRelay(
+        targetUrl.toString(),
+        fwdHeaders,
+        cookie,
+        ref,
+        ua,
+      );
+      usedProxy = upstream.headers.get('X-Proxy-Via') || via;
+    } else {
+      // FanCode: geographic block only, and bom1 clears it.
+      upstream = await fetchBounded(
+        targetUrl.toString(),
+        fwdHeaders,
+        Date.now() + UPSTREAM_TIMEOUT_MS,
+      );
+    }
   } catch (e) {
     return new Response('Upstream failed: ' + e.message, {
       status: 502,
@@ -144,14 +167,12 @@ export async function onRequest(context) {
   }
 
   const outHeaders = { ...corsHeaders() };
+  if (usedProxy) outHeaders['X-Proxy-Via'] = usedProxy;
 
   if (!upstream.ok) {
     const body = await upstream.text();
     outHeaders['X-Upstream-Status'] = String(upstream.status);
-    return new Response(body.slice(0, 2000), {
-      status: upstream.status,
-      headers: outHeaders,
-    });
+    return new Response(body.slice(0, 2000), { status: upstream.status, headers: outHeaders });
   }
 
   const ar = upstream.headers.get('accept-ranges');
@@ -173,18 +194,12 @@ export async function onRequest(context) {
     // Inject only when there is no BaseURL at all. A relative BaseURL is
     // still a BaseURL, and a second MPD-level one would shadow it.
     if (!/<BaseURL\b/i.test(xml)) {
-      const dir =
-        targetUrl.href.slice(0, targetUrl.href.lastIndexOf('/') + 1) +
-        targetUrl.search;
+      const dir = targetUrl.href.slice(0, targetUrl.href.lastIndexOf('/') + 1) + targetUrl.search;
       xml = xml.replace(/(<MPD\b[^>]*>)/i, `$1<BaseURL>${escapeXml(dir)}</BaseURL>`);
     }
     return new Response(xml, {
       status: 200,
-      headers: {
-        ...outHeaders,
-        'Content-Type': 'application/dash+xml',
-        'Cache-Control': 'no-cache',
-      },
+      headers: { ...outHeaders, 'Content-Type': 'application/dash+xml', 'Cache-Control': 'no-cache' },
     });
   }
 
@@ -193,8 +208,9 @@ export async function onRequest(context) {
     const base = `https://${url.host}/api/live-proxy`;
     const extras =
       (cookie ? '&cookie=' + encodeURIComponent(cookie) : '') +
-      (ref    ? '&ref='    + encodeURIComponent(ref)    : '') +
-      (ua     ? '&ua='     + encodeURIComponent(ua)     : '');
+      (ref ? '&ref=' + encodeURIComponent(ref) : '') +
+      (ua ? '&ua=' + encodeURIComponent(ua) : '') +
+      (usedProxy ? '&via=' + encodeURIComponent(usedProxy) : '');
 
     const parentQuery = targetUrl.search;
     const toAbs = (r) => {
@@ -215,11 +231,7 @@ export async function onRequest(context) {
 
     return new Response(body, {
       status: 200,
-      headers: {
-        ...outHeaders,
-        'Content-Type': 'application/vnd.apple.mpegurl',
-        'Cache-Control': 'no-cache',
-      },
+      headers: { ...outHeaders, 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'no-cache' },
     });
   }
 
